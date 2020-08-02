@@ -1,9 +1,1 @@
-der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt der vogel fliegt 
-
-
-
-sdfsdfsdfssf
-sdfsdf
-
-
-sdfsdf
+git config --global --set credential.helper=cache --timeout=3600
