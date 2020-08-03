@@ -1,0 +1,471 @@
+%-------------------------------------
+<<parent1, echo=FALSE, cache=FALSE>>=
+#knitr::opts_chunk$set(comment=NA)
+knitr::opts_chunk$set(comment=NA)
+rm(list=ls())
+set.seed(132435)
+library(knitr)
+set_parent('./parent07.Rnw')
+@
+
+<<mystats1, echo=FALSE, error=FALSE, message=FALSE, results='asis', warning=FALSE, cache=FALSE, outodep=TRUE>>=
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+#PREAMBLE: Several packages
+#Here we are loading all the necessary libraries, chicking that we are on the correct OS
+# Load necessary libraries:
+# library(reshape)
+# First three packages used to be in first chunk...
+library(tidyverse)
+library(plm)       # Panel data analysis library
+library(reshape2)
+library(lme4)
+library(Matrix)
+library(plyr)
+library(ggplot2)
+library(xtable)
+library(tidyverse)
+library(plm)
+library(stargazer)
+# library(doBy)
+#==============================
+
+#==============================================
+#Set up working directory: +++ MAKE SURE THE CORRECT DIRECTORY IS BEING USED ***
+setwd('C:/Users/vera/Documents/Uni/2 Master EOEP/5. Masterarbeit/03_Dokument')
+cur.wd = getwd()
+#==============================================
+
+
+class.size <- 30 # number of students in each class
+student.id <- seq(1:class.size)
+class.id <- seq(1:2)
+
+wave <- seq(1:2) - 1
+
+d <- expand.grid(wave = wave, student.id = student.id, class.id = class.id)
+
+rm(wave, class.id, student.id)
+
+#---------------------------------
+
+d$treated <- ifelse( d$class.id==1, 1, 0)
+df <- unique(d[c("student.id", "class.id")]) # creates new data sheet with those two variables from first data sheet
+df <- df %>% mutate(ustudent.id = 1:n()) %>%
+#mutate() adds new variables and preserves existing ones
+    select(ustudent.id, everything()) #student ID für jeden einzelnen Schüler unabhängig von der Klasse
+df$student.effect <- rnorm(nrow(df), mean=0, sd=1)
+d <- left_join(d, df, by=c("class.id", "student.id")) # joining two tbls together
+# head(d)
+
+#-------------------------------------
+### The outcomes are determined by the following data generating process ###
+
+teffect <- 1 # treatment effect
+wave.effects <- -1 # wave effects
+class.effect <- 2
+cons <- 0
+d$y <- cons + class.effect*d$treated + 
+              wave.effects*d$wave + 
+              teffect*(d$treated*d$wave) +
+              d$student.effect +
+              rnorm(nrow(d), mean=0, sd=1)
+
+#-------------------------------
+### DD ###
+
+y00 <- mean( d$y[(d$treated==0 & d$wave==0)] )
+y10 <- mean( d$y[(d$treated==1 & d$wave==0)] )
+y01 <- mean( d$y[(d$treated==0 & d$wave==1)] )
+y11 <- mean( d$y[(d$treated==1 & d$wave==1)] )
+
+cat(paste('\\newcommand{\\one}{\n', sep=''))
+(y11 - y10) - (y01- y00)
+cat(paste('}\n'))
+
+
+y02 <- mean( d$y[(d$treated==0 & d$wave==2)] )
+y12 <- mean( d$y[(d$treated==1 & d$wave==2)] )
+
+cat(paste('\\newcommand{\\two}{\n', sep=''))
+(y12 - y10) - (y02- y00)
+cat(paste('}\n'))
+
+y03 <- mean( d$y[(d$treated==0 & d$wave==3)] )
+y13 <- mean( d$y[(d$treated==1 & d$wave==3)] )
+
+cat(paste('\\newcommand{\\three}{\n', sep=''))
+(y13 - y10) - (y03- y00)
+cat(paste('}\n'))
+
+
+y04 <- mean( d$y[(d$treated==0 & d$wave==4)] )
+y14 <- mean( d$y[(d$treated==1 & d$wave==4)] )
+
+cat(paste('\\newcommand{\\four}{\n', sep=''))
+(y14 - y10) - (y04- y00)
+cat(paste('}\n'))
+
+
+#----------------------------------------
+### DD regression ###
+d.p <- pdata.frame(d, index = c("ustudent.id", "wave"))
+
+
+## OLS ##
+
+ols <- lm( y ~ treated + wave + treated*wave, data = d)
+
+cat(paste('\\newcommand{\\ols}{\n', sep=''))
+stargazer(ols,
+          title = "OLS regression results",
+          align = F,
+          header = T,
+          notes = "",
+          label = "tab:ols",
+          dep.var.labels.include = F,
+          single.row = T,
+          dep.var.caption = "Dependent variable:")
+cat(paste('}\n'))
+
+diff <- plm(diff(y, 4) ~ diff(treated, 4), d.p, model = "pooling")
+cat(paste('\\newcommand{\\diff}{\n', sep=''))
+stargazer(diff,
+          title = "Estimating the model in differences",
+          align = F,
+          header = T,
+          notes = "",
+          label = "tab:diff",
+          dep.var.labels.include = F,
+          single.row = T,
+          dep.var.caption = "Dependent variable:")
+cat(paste('}\n'))
+
+
+## Fixed effects DD regression ##
+
+
+fe <- plm( y ~  wave + treated*wave, data = d.p, model = "within")
+head(fixef(fe))
+head(fixef(fe, type = "dfirst"))
+head(fixef(fe, type = "dmean"))
+FE <- fixef(fe)
+ind.eff <- expand.grid(FE)
+ind.eff <- ind.eff %>% mutate(ustudent.id = 1:60) %>%
+  select(ustudent.id, everything())
+d <- left_join(d, ind.eff)
+left_join(d, fixef(fe), by)
+
+cat(paste('\\newcommand{\\fe}{\n', sep=''))
+stargazer(fe,
+          title = "Fixed Effects",
+          align = F,
+          header = T,
+          notes = "",
+          label = "tab:fe",
+          dep.var.labels.include = F,
+          single.row = T,
+          dep.var.caption = "Dependent variable:")
+cat(paste('}\n'))
+
+
+## Random effects DD regression ##
+
+re <- plm( y ~ treated + wave + treated*wave, data = d, model = "within", index = "ustudent.id")
+
+cat(paste('\\newcommand{\\re}{\n', sep=''))
+stargazer(re,
+          title = "Random Effects",
+          align = F,
+          header = T,
+          notes = "",
+          label = "tab:re",
+          dep.var.labels.include = F,
+          single.row = T,
+          dep.var.caption = "Dependent variable:")
+cat(paste('}\n'))
+
+# Stargazer: Several possibilites are offered by the library to improve the appearance of the table:
+
+## the - omit - argument is used to omit two sets of cefficients correspoinding to the region and sector factors, - omit.labels - indicates how the information about these covariates will be in cluded in the table,
+## the F statistic and adjustet Rsq are removed from the output using - omit.stat -,
+## customized names for the response and the covariates are provided with - dep.var.labels - and - covariate.labels -
+## - column.labels - and - column.separate - are used to indicate the method of estimation used for the first two and tha last two models
+
+
+
+# stargazer(ols, single.row = T, column.sep.width = "-15pt", align=T)
+
+# stargazer(fe, re, column.sep.width = "-15pt", align=T, single.row = T)
+
+# stargazer(fe, re, column.sep.width = "-15pt", align=T, single.row = T)
+
+# For stargazer: Might be nixe to have Title in Capital Letteres and some notes, describing what's in parantheses
+
+@
+
+
+<<mystats2, echo=FALSE, error=FALSE, message=FALSE, results='hide', warning=FALSE, cache=FALSE, outodep=TRUE, comment="">>=
+
+### JUST SOME EXPERIMENTING WITH PANEL DATA ###
+
+## Croissant & Millo: Panel Data Econometrics with R
+
+data("Fatalities", package="AER")
+Fatalities$frate <- with(Fatalities, fatal / pop * 10000)
+fm <- frate ~ beertax
+
+mod82 <- lm(fm, Fatalities, subset = year == 1982)
+summary(mod82)
+
+mod88 <- update(mod82, subset = year == 1988)
+library("lmtest")
+
+coeftest(mod88)
+
+poolmod <- plm(fm, Fatalities, model = "pooling")
+coeftest(poolmod)
+
+# We suspect the presence of unobserved heterogeneity -> Panel dtat analyses!
+
+# If omitted from the specification, the individual intecepts - but for general mean - will end up in the error erm; if they are not independent of the regressor (here, if unobserved state-level characteristics are related to how the local beer tax is set) the OLS estimat will be biased and inconsistent.
+
+# Simplest way to get rid of the indicidual intercept: estimate the model in differences. In this case, we consider differences between the first and last years in the sample
+
+dmod <- plm(diff(frate, 5) ~ diff(beertax, 5), Fatalities, model = "pooling")
+coef(dmod)
+
+# After controlling for state heterogeneity, higher taxation on beer is associated with lower number of fatalities.
+
+# Another way to control for time-invariant unobservables is to estimate them out explicitly. Sepearte intercepts could be easily added in plain R using the formula syntax:
+
+lsdv.fm <- update(fm, . ~ . + state -1)
+lsdvmod <- lm(lsdv.fm, Fatalities)
+coef(lsdvmod)[1]
+
+# Fixed effect (within) estimation
+
+femod <- plm(fm, Fatalities)
+coeftest(femod)
+# stargazer(mod82, align=T)
+# stargazer(poolmod, align=T)
+# stargazer(dmod, align=T)
+# stargazer(lsdvmod, align=T)
+# stargazer(femod, align=T)
+
+
+# Croissant and Millo, p.31
+data("TobinQ", package = "pder")
+
+# Creating pdata.frame
+
+pTobinQ <- pdata.frame(TobinQ) # NULL, the default: in this case, it is assumed that the first two columns of the data.frame contain the indicidual and the time index
+
+pTobinQa <- pdata.frame(TobinQ, index =188) # an integer indicatin the number of periods (only for a balanced pabel with observations first ordered by individuals and then by period)
+
+pTobinQb <- pdata.frame(TobinQ, index = c('cusip')) # a character vector of length on indicatin the individual index (in this case, it is assumed that there is no time index in the data)
+
+pTobinQc <- pdata.frame(TobinQ, index = c('cusip', 'year')) # a character vector of length two indicating the individual and time index
+
+# The pdim function can be used to inspect the individual and time dimensions of the data.
+
+pdim(TobinQ)
+pdim(TobinQ, index = 'cusip')
+
+head(index(pTobinQ))
+
+# We then estimte the three models:
+
+Qeq <- ikn ~ qn
+Q.pooling <- plm(Qeq, pTobinQ, model = "pooling")
+Q.within <- update(Q.pooling, model = "within")
+Q.between <- update(Q.pooling, model = "between")
+
+summary(Q.within)
+
+
+# Computing the individual effects
+head(fixef(Q.within)) # default - returns the individual intercepts
+head(fixef(Q.within, type = "dfirst")) # returns the individual effects in deviation from the first individual, alpha.hat is in this case the intercept for the first individual
+head(fixef(Q.within, type = "dmean")) # returns the individual effects in deviation from their mean, in this cas, alpha.hat is the average of the individual intercepts
+
+
+# Illustratin the equivalence of the within estimator and the LSDV estimator
+
+head(coef(lm(ikn ~ qn + factor(cusip), pTobinQ)))
+
+
+# The GLS estimator considers the individual effects as random draws from a specific distribution and seeks to estimate the parameters of this distribution in order to obtain efficient estimators of the slopes. When the errors are not correlated with the covariates but are characterized by a non-scalar covariance matric Omega, the efficient estimator is the generalized least square estimator. This estimator is called the random effects model, as opposed to the fixed effects model. This results from the fact that, as observed, in this case, the individual effects are considered as random deviates, the parameters of whose distribution we seek to estimate.
+
+## The random effects model is obtained by setting model to 'random'. Specific arguments indicate how the variances are estimated.
+
+Q.swar <- plm(Qeq, pTobinQ, model = "random", random.method = "swar")
+Q.swar2 <- plm(Qeq, pTobinQ, model = "random",
+              random.models = c("within", "between"),
+              random.dfcor = c(2, 2))
+summary(Q.swar)
+
+# The results indicate that the part in the variance of the individual effect is about one fourth. The parameter called theta is the part of the individual mean that is removed from each variable for the GLS estimator. It is here equal to 73 % (Croissant and Millo, p.38). This high value is due to the large time dimension of this panel (T=35). This implies that the GLS estimator is closer to the within estimator (Theta=1) tha to the OLS estimator (Theta=0).
+
+# The part of the results that deals with the estimation of the two components of the error may also be obtained by allplying the ercomp function either to the GLS fitted model or using a formula-data interface
+
+ercomp(Qeq, pTobinQ)
+ercomp(Q.swar)
+
+# We then compare the results obtained with the 4 estimation methods we've presented:
+
+Q.walhus <- update(Q.swar, random.method = "swar")
+Q.amemiya <- update(Q.swar, random.method = "amemiya")
+Q.nerlove <- update(Q.swar, random.method = "nerlove")
+Q.models <- list(swar =Q.swar, walhus = Q.walhus,
+                 amemiya = Q.amemiya, nerlove = Q.nerlove)
+sapply(Q.models, function(x) ercomp(x)$theta)
+sapply(Q.models, coef)
+
+# The firs sapply command extracts from the ercomp object the theta element, indicating the proportion of the individual mean that is removed from the variables. These are very close to each other, and consequently, the estimated coefficients for the 4 models are almost identical.
+
+
+
+## Comparinson of the Estimators
+
+# We have four differenct estimators of the same model: the between and the within estimators use only on source of the variance of the sample, while the OLS and the GLS estimators use both. Note first that, if the hypo that the errors and the cov are uncorrelated is true, all these models are unbiased and consistent, which means that they should give similar results, at least in large samples.
+
+# We'll first analyze the relations between these estimators; we'l lthen compare their variances; and finally we'll analyze in which circumstances we should use fixed or random effects.
+
+# Relations between the Estimators: We can expect OLS and GLS estimators to give intermediate results between the within and the between estimatros as tehy use both sources of variance.
+# For the OLS estimator, the weights are very intuitive because they are just the shares of the intra- and inter-individual variances of the covariates but also on the variance of the errors, which determines the Phi parameters. The GLS estimator will always give less weights to the between variation, as Phi is lower than 1- It leads to two special cases - the GLS estimator converges to the within estimator of the GLS estimator converges to the OLS estimator.
+
+# Comparison of the Variances: The variance of the within estimator is a positive definite matrix, and the GLS estimator is therefore mor efficient thatn the within estimator.
+
+# Fixed vs Random Effects
+# The main argument that leads to choose one of the two approaches is the possibility of correlation between some covariates and the individual effects. If we maintain the hypo that the idiosyncratic error is unvorrelated with the covaries, two situations can occur:
+  # The individual effects are not correlated; in this case, both models are consistent, but the random effects estimator is more efficient than the fixed effects model
+  # The individual effects are correlated; in this case, only the fixed effects method gives consistent estimates as, with the within transformation, the individual effects vanish.
+
+# The following commands extracts the coefficient of qn and its standard deviation fo the gour estimators.
+
+sapply(list(pooling = Q.pooling, within = Q.within,
+            between = Q.between, swar = Q.swar),
+       function(x) coef(summary(x))["qn", c("Estimate", "Std. Error")])
+
+# The OLS and GLS estimators are in the interval defined by the within and between estimators, and the GLS estimator is closer to the within estimator than OLS.
+# Looking and the standard deviations, OLS seems to be the moste efficient model, but remember that the standard formula for computing the variance of the OLS estimator is biased if individual effects are present. The standard deviation for the GLS estimator is slightly lower than for the within estimator and much lower than for the between estimato# The formal relation between the different estimators is then illustrated by computing the shares of the variances for the covariate qn. For this pupose, we'll extract this series from the padata.fram, which is not as for dtat.fram, a numeric vector, but a pseries object, which inherits from the pdata.frame it has been extracted from the index attribute. The summary.pseries method applied to this object indicate the variance structure of the series:
+
+summary(pTobinQ$qn)
+
+# We cn use the Within and the Between function with this series in order to copute its within and the between tranformations, and then the weights of the within and the betweeen estimators in the OLS estimator.
+
+SxxW <- sum(Within(pTobinQ$qn) ^ 2)
+SxxB <- sum(Between(pTobinQ$qn) - mean(pTobinQ$qn) ^ 2)
+SxxTot <- sum((pTobinQ$qn - mean(pTobinQ$qn)) ̂ 2)
+pondW <- SxxW / SxxTot
+pondW
+
+pondW * coef(Q.within)[["qn"]] +
+(1 - pondW) * coef(Q.between)[["qn"]]
+
+# The weight of the within model is 57%. The OLS estimator (0.0044) is then about half way between the between estimator (0.0052) and the within estimator (0.0038). To get the GLS estimator, we first estimate the parameter Phi using the residuals of the within and the between estimators:
+
+T <- 35
+N <- 188
+smxt2 <- deviance(Q.between) * T / (N - 2)
+sidios2 <- deviance(Q.within) / (N * (T - 1) - 1)
+phi <- sqrt(sidios2 / smxt2)
+
+# The weights for the within and the between estimators and the GLS estimator are then computed:
+
+pondW <- SxxW / (SxxW + phi ̂ 2 * SxxB)
+pondW
+
+pondW * coef(Q.within)[["qn"]] +
+(1 - pondW) * coef(Q.between)[["qn"]]
+
+# ??? Results different from the textbook ???
+# The weights of the within estimator (0.95) is much larger for the GLS estimator than for the OLS estimator. This is mainly due to the fact that T is large (35 years). The GLS estimator (0.039) is therefore very close to the within estimator (0.0038).
+
+
+
+## Some simple linear model examples
+
+# ForeignTrade data set
+# Link between imports and the national product
+
+data("ForeignTrade", package = "pder")
+FT <- pdata.frame(ForeignTrade)
+summary(FT$gnp)
+ercomp(imports ̃ gnp, FT)
+models <- c("within", "random", "pooling", "between")
+sapply(models, function(x) coef(plm(imports ̃ gnp, FT, model = x))["gnp"])
+
+# For this model, the variance of the covariate and of the error is almost only due to the inter-individual variation (respectively 98 and 93%). In this case, the GLS estimator consists in removing 94% of the individual mean and is therefore almost identical to the within model. Concerning the OLS estimator, which takes into account almost all the inter-individual variation, it is very close to the between estimator. Finally, the first two models five results that are very different from the last two models and return a much higher elasticity. There is a stron negative correlation between the individual effects and the covariate. In this case, the estimators that do not control for the individual effects are biased downward. This is the cse for the OLS and the between estimators, and to a much lesser extent for the GLS estimator, which uses only a very small part of the inter-individual variation.
+
+
+# TurkishBanks data set
+# production costs of banks
+
+data("TurkishBanks", package = "pder")
+TurkishBanks <- na.omit(TurkishBanks)
+TB <- pdata.frame(TurkishBanks)
+summary(log(TB$output))
+ercomp(log(cost) ̃ log(output), TB)
+sapply(models, function(x)
+coef(plm(log(cost) ̃ log(output), TB, model = x))["log(output)"])
+
+# The variation of the covariate is mainly inter-individual (85%), but for the error, the share of the individual effect and that of the idiosyncratic effect are similar (40% and 60%). The OLS and the between estimators are therfore very close. The GLS estimator is about halfway between the OLS and the within estimators because the transformation removes about 65% of the individual mean. The individua effects are positively correlated with the covariate, and consequently, the between, the OLS and in a lesser extent the GLS estimators are upwar-biased.
+
+
+# TexasElectr data set
+# Production costs of electric firms in Texas
+
+data("TexasElectr", package = "pder")
+TexasElectr$cost <- with(TexasElectr, explab + expfuel + expcap)
+TE <- pdata.frame(TexasElectr)
+summary(log(TE$output)) # The variation of the covariate is mainly inter-individual (82%)
+ercomp(log(cost) ~ log(output), TE) # yet this is not the case for the error, for which the idiosyncrativ share is very important: therfore, only a very small part of the individual mean is removed while applying the GLS estimator. The GLS and OLS estimator are therefore almost equal. The within estimator is much higher because the individual effects and the covariate are negatively correlated.
+sapply(models, function(x)
+coef(plm(log(cost) ̃ log(output), TE, model = x))["log(output)"])
+
+
+
+# DemocracyIncome25
+# Causal relationship between wealth and democracy
+
+data("DemocracyIncome25", package = "pder")
+DI <- pdata.frame(DemocracyIncome25)
+summary(lag(DI$income)) # The sahre of the inter-individual variation for the covariate and for the error are rather weak (43 adn 21%).
+ercomp(democracy ̃ lag(income), DI)
+# 41% of the individual mean is removed from the variables in order to compute the GLS estimator.
+
+# There is no obvious correlation between the individual effects and the covariate; consequently, the 4 estimators are rather close to each other.
+
+
+
+# results <- data.frame(xcoef = NA,
+                      # xse = NA)
+
+# for (i in 1:5000) {
+  
+  # error1 <- rnorm(5000)
+  # x = error1 + rnorm(5000)
+  # y = 1.5*x + (error1 + rnorm(5000))
+
+  # olsmodel <- lm(y ~ x)
+  
+  # results[i,] <- c(coef(olsmodel)[['x']],
+                   # summary(olsmodel)$coefficients[2,2])
+  
+# }
+
+# plot(density(results$xcoef))
+# summary(olsmodel) # omitted variable bias
+
+# Do this process many many times
+
+
+
+
+## Original computing environment ##
+
+# devtools::session_info()
+
+@
+
